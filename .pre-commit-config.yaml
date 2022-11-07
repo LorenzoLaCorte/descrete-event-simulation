@@ -2,7 +2,7 @@ default_language_version:
   python: python3
 repos:
   - repo: https://github.com/psf/black
-    rev: 22.8.0
+    rev: 22.10.0
     hooks:
       - id: black
   - repo: https://gitlab.com/pycqa/flake8
@@ -21,6 +21,6 @@ repos:
     hooks:
       - id: isort
   - repo: https://github.com/ComPWA/mirrors-pyright
-    rev: "v1.1.273"
+    rev: "v1.1.278"
     hooks:
       - id: pyright
