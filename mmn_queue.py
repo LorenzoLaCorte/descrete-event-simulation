@@ -2,10 +2,9 @@
 
 import csv
 import math
-import random
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 from collections import deque
-from random import expovariate, sample
+from random import expovariate, sample, randint
 
 from discrete_event_sim import Event, Simulation
 
@@ -41,7 +40,7 @@ class MMN(Simulation):
 
     def choose_queue(self) -> int:
         if self.rand:
-            return random.randint(0, len(self.queues) - 1)
+            return randint(0, len(self.queues) - 1)
         sample_queues: list[int] = sample(
             range(len(self.queues)), math.ceil(self.n * 0.7)
         )
