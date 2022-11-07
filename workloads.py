@@ -7,6 +7,7 @@ import random
 from datetime import datetime
 from functools import partial
 from tempfile import NamedTemporaryFile
+
 import requests
 
 MUSTANG_URL: str = (
