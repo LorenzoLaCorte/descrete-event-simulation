@@ -15,8 +15,11 @@ class Simulation:
         You can call super().__init__() there to call the code here.
         """
 
-        self.t = 0  # simulated time
+        self.t: float = 0  # simulated time
         self.events: list[tuple[float, "Event"]] = []
+
+    def __lt__(self, other: "Simulation") -> bool:
+        return id(self) < id(other)
 
     def schedule(self, delay: float, event: "Event") -> None:
         """Add an event to the event queue after the required delay."""
@@ -27,6 +30,8 @@ class Simulation:
         """Run the simulation. If max_t is specified, stop it at that time."""
 
         while self.events:
+            t: float
+            event: Event
             t, event = heappop(self.events)
             if t > max_t:
                 break

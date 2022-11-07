@@ -8,6 +8,8 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.10"
 matplotlib = "^3.6.1"
+humanfriendly = "^10.0"
+requests = "^2.28.1"
 
 
 [tool.poetry.group.dev.dependencies]
