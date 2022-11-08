@@ -264,9 +264,6 @@ class NodeEvent(Event):
         """Must be implemented by subclasses."""
         raise NotImplementedError
 
-    def __lt__(self, other: "NodeEvent") -> bool:
-        return id(self) < id(other)
-
 
 class Online(NodeEvent):
     """A node goes online."""
@@ -389,9 +386,6 @@ class TransferComplete(Event):
     def update_block_state(self) -> None:
         """Needs to be specified by the subclasses, `BackupComplete` and `DownloadComplete`."""
         raise NotImplementedError
-
-    def __lt__(self, other: "TransferComplete") -> bool:
-        return id(self) < id(other)
 
 
 class BlockBackupComplete(TransferComplete):

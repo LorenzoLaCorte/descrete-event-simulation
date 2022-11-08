@@ -18,9 +18,6 @@ class Simulation:
         self.t: float = 0  # simulated time
         self.events: list[tuple[float, "Event"]] = []
 
-    def __lt__(self, other: "Simulation") -> bool:
-        return id(self) < id(other)
-
     def schedule(self, delay: float, event: "Event") -> None:
         """Add an event to the event queue after the required delay."""
 
@@ -51,3 +48,6 @@ class Event:
 
     def process(self, sim: Any) -> None:
         raise NotImplementedError
+
+    def __lt__(self, other: "Event") -> bool:
+        return id(self) < id(other)

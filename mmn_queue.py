@@ -166,6 +166,7 @@ def start_simulation(
             x=list(normalized_queues_lengths.keys()),
             y=list(normalized_queues_lengths.values()),
             line_color=color,
+            line_width=5,
             name=str(args.lambd),
             mode="lines",
             showlegend=(row == 1 and col == 1),
@@ -232,7 +233,15 @@ def main() -> None:
                 args.lambd = lambd
                 start_simulation(fig, args, color, row, col)
 
-    fig.update_layout(legend_title_text="λ")  # type: ignore
+    fig.update_layout(  # type: ignore
+        {
+            "legend_title_text": "λ",
+            "xaxis_title": "queue length",
+            "yaxis_title": "fraction of queues with at least that size",
+        }
+    )
+    fig.update_xaxes({"range": [0, 14], "tick0": 0, "dtick": 2})  # type: ignore
+    fig.update_yaxes({"range": [0, 1], "tick0": 0, "dtick": 0.2})  # type: ignore
     fig.show()  # type: ignore
 
 
