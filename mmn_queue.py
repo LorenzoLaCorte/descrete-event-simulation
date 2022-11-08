@@ -4,7 +4,7 @@ import csv
 import math
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 from collections import deque
-from random import expovariate, sample, randint
+from random import expovariate, randint, sample
 
 from discrete_event_sim import Event, Simulation
 
