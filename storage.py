@@ -21,12 +21,6 @@ def exp_rv(mean: float) -> float:
     return expovariate(1 / mean)
 
 
-class DataLost(Exception):
-    """Not enough redundancy in the system, data is lost. We raise this exception to stop the simulation."""
-
-    pass
-
-
 class Backup(Simulation):
     """Backup simulation."""
 
@@ -159,6 +153,8 @@ class Node:
 
         assert self.online
 
+        sim.log_info(f"schedule_next_upload on {self}")
+
         if self.current_upload is not None:
             return
 
@@ -277,7 +273,7 @@ class Online(NodeEvent):
         node.schedule_next_upload(sim)
         node.schedule_next_download(sim)
         # schedule the next offline event
-        sim.schedule(exp_rv(node.average_lifetime), Offline(node))
+        sim.schedule(exp_rv(node.average_uptime), Offline(node))
 
 
 class Recover(Online):
@@ -289,7 +285,7 @@ class Recover(Online):
         node.failed = False
         node.free_space = node.storage_size - node.block_size * node.n
         super().process(sim)
-        sim.schedule(exp_rv(node.average_uptime), Fail(node))
+        sim.schedule(exp_rv(node.average_lifetime), Fail(node))
 
 
 class Disconnection(NodeEvent):
@@ -405,11 +401,7 @@ class BlockRestoreComplete(TransferComplete):
         if (
             sum(owner.local_blocks) == owner.k
         ):  # we have exactly k local blocks, we have all of them then
-            peer: Node = self.uploader
-            peer.remote_blocks_held[owner] = self.block_id
-            owner.free_space -= peer.block_size
-        else:
-            raise DataLost()
+            ...
 
 
 def main() -> None:

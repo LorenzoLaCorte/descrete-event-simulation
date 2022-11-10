@@ -62,14 +62,7 @@ class MMN(Simulation):
             range(len(self.queues)), math.ceil(self.n * self.queues_sample)
         )
         self.last_queues_sample_indexes = sample_queues
-        min_index: int = sample_queues[0]
-        min_length: int = self.queue_len(min_index)
-        for index in sample_queues[1:]:
-            length: int = self.queue_len(index)
-            if length < min_length:
-                min_index = index
-                min_length = length
-        return min_index
+        return min(sample_queues, key=lambda index: self.queue_len(index))
 
     def schedule_arrival(self, job_id: int) -> None:
         # schedule the arrival following an exponential distribution, to compensate the number of queues the arrival
@@ -85,7 +78,7 @@ class MMN(Simulation):
         )
 
     def queue_len(self, index: int) -> int:
-        return (self.running[index] is None) + len(self.queues[index])
+        return (self.running[index] is not None) + len(self.queues[index])
 
 
 class LengthChecker(Event):
