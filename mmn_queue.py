@@ -235,6 +235,7 @@ def main() -> None:
     )
     fig.update_xaxes({"range": [0, 14], "tick0": 0, "dtick": 2})  # type: ignore
     fig.update_yaxes({"range": [0, 1], "tick0": 0, "dtick": 0.2})  # type: ignore
+    fig.write_image("res.pdf")  # type: ignore
     fig.show()  # type: ignore
 
 

@@ -61,10 +61,10 @@ class Backup(Simulation):
         self.schedule(delay, event)
         uploader.current_upload = downloader.current_download = event
 
-        self.log_info(
-            f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"
-            f" in {format_timespan(delay)}"
-        )
+        # self.log_info(
+        #     f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"
+        #     f" in {format_timespan(delay)}"
+        # )
 
     def log_info(self, msg: str) -> None:
         """Override method to get human-friendly logging for time."""
@@ -153,7 +153,7 @@ class Node:
 
         assert self.online
 
-        sim.log_info(f"schedule_next_upload on {self}")
+        # sim.log_info(f"schedule_next_upload on {self}")
 
         if self.current_upload is not None:
             return
@@ -176,7 +176,7 @@ class Node:
         block_id: int | None = self.find_block_to_back_up()
         if block_id is None:
             return
-        sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
+        # sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
         remote_owners: set["Node"] = set(
             node for node in self.backed_up_blocks if node is not None
         )  # nodes having one block
@@ -200,7 +200,7 @@ class Node:
 
         assert self.online
 
-        sim.log_info(f"schedule_next_download on {self}")
+        # sim.log_info(f"schedule_next_download on {self}")
 
         if self.current_download is not None:
             return
@@ -214,7 +214,6 @@ class Node:
                 and peer is not None
                 and peer.online
                 and peer.current_upload is None
-                and peer.backed_up_blocks[block_id] is None
             ):
                 sim.schedule_transfer(
                     uploader=peer, downloader=self, block_id=block_id, restore=True
