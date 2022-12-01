@@ -2,7 +2,7 @@
 
 import logging
 import random
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 from configparser import ConfigParser, SectionProxy
 from dataclasses import dataclass
 from random import expovariate
@@ -26,9 +26,10 @@ class Backup(Simulation):
 
     # type annotations for `Node` are strings here to allow a forward declaration:
     # https://stackoverflow.com/questions/36193540/self-reference-or-forward-reference-of-type-annotations-in-python
-    def __init__(self, nodes: list["Node"]) -> None:
+    def __init__(self, nodes: list["Node"], simultaneous: bool = False) -> None:
         super().__init__()  # call the __init__ method of parent class
         self.nodes: list["Node"] = nodes
+        self.simultaneous = simultaneous
 
         # we add to the event queue the first event of each node going online and of failing
         for node in nodes:
@@ -43,11 +44,11 @@ class Backup(Simulation):
         If `restore` is true, we are restoring a block owned by the downloader, otherwise, we are saving one owned by
         the uploader.
         """
+        if not self.simultaneous:
+            assert uploader.current_upload is None
+            assert downloader.current_download is None
 
         block_size = downloader.block_size if restore else uploader.block_size
-
-        assert uploader.current_upload is None
-        assert downloader.current_download is None
 
         speed: float = min(
             uploader.upload_speed, downloader.download_speed
@@ -164,8 +165,8 @@ class Node:
             # schedule the restore from self to peer of block_id
             if (
                 peer.online
-                and peer.current_download is None
                 and not peer.local_blocks[block_id]
+                and (sim.simultaneous or peer.current_download is None)
             ):
                 sim.schedule_transfer(
                     uploader=self, downloader=peer, block_id=block_id, restore=True
@@ -187,8 +188,8 @@ class Node:
                 peer is not self
                 and peer.online
                 and peer not in remote_owners
-                and peer.current_download is None
                 and peer.free_space >= peer.block_size
+                and (sim.simultaneous or peer.current_download is None)
             ):
                 sim.schedule_transfer(
                     uploader=self, downloader=peer, block_id=block_id, restore=False
@@ -213,7 +214,7 @@ class Node:
                 not held_locally
                 and peer is not None
                 and peer.online
-                and peer.current_upload is None
+                and (sim.simultaneous or peer.current_upload is None)
             ):
                 sim.schedule_transfer(
                     uploader=peer, downloader=self, block_id=block_id, restore=True
@@ -225,9 +226,9 @@ class Node:
             if (
                 peer is not self
                 and peer.online
-                and peer.current_upload is None
                 and peer not in self.backed_up_blocks
                 and self.free_space >= self.block_size
+                and (sim.simultaneous or peer.current_upload is None)
             ):
                 block_id: int | None = peer.find_block_to_back_up()
                 if block_id is not None:
@@ -366,8 +367,9 @@ class TransferComplete(Event):
             return  # this transfer was canceled, so ignore this event
         uploader: Node = self.uploader
         downloader: Node = self.downloader
-        assert uploader.online and downloader.online
-        self.update_block_state()
+        if sim.simultaneous and (not uploader.online or not downloader.online):
+            return
+        self.update_block_state(sim.simultaneous)
         uploader.current_upload = downloader.current_download = None
         uploader.schedule_next_upload(sim)
         downloader.schedule_next_download(sim)
@@ -378,15 +380,17 @@ class TransferComplete(Event):
                 f"{len(node.remote_blocks_held)} remote blocks held"
             )
 
-    def update_block_state(self) -> None:
+    def update_block_state(self, simultaneous: bool = False) -> None:
         """Needs to be specified by the subclasses, `BackupComplete` and `DownloadComplete`."""
         raise NotImplementedError
 
 
 class BlockBackupComplete(TransferComplete):
-    def update_block_state(self) -> None:
+    def update_block_state(self, simultaneous: bool = False) -> None:
         owner: Node = self.uploader
         peer: Node = self.downloader
+        if simultaneous and peer.free_space - owner.block_size < 0:
+            return
         peer.free_space -= owner.block_size
         assert peer.free_space >= 0
         owner.backed_up_blocks[self.block_id] = peer
@@ -394,7 +398,7 @@ class BlockBackupComplete(TransferComplete):
 
 
 class BlockRestoreComplete(TransferComplete):
-    def update_block_state(self) -> None:
+    def update_block_state(self, simultaneous: bool = False) -> None:
         owner: Node = self.downloader
         owner.local_blocks[self.block_id] = True
         if (
@@ -409,6 +413,7 @@ def main() -> None:
     parser.add_argument("--max-t", default="100 years")
     parser.add_argument("--seed", help="random seed")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--simultaneous", default=False, action=BooleanOptionalAction)
     args: Namespace = parser.parse_args()
 
     if args.seed:
@@ -447,7 +452,7 @@ def main() -> None:
             Node(f"{node_class}-{i}", *cfg)  # type: ignore
             for i in range(class_config.getint("number"))
         )
-    sim = Backup(nodes)
+    sim = Backup(nodes, args.simultaneous)
     sim.run(parse_timespan(args.max_t))
     sim.log_info("Simulation over")
 
