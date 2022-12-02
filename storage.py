@@ -21,6 +21,15 @@ def exp_rv(mean: float) -> float:
     return expovariate(1 / mean)
 
 
+def get_safe_blocks(nodes: list["Node"]) -> int:
+    if not nodes:
+        return 0
+    result = [False] * nodes[0].n
+    for node in nodes:
+        result = [x or y for x, y in zip(result, node.local_blocks)]
+    return sum(result)
+
+
 class Backup(Simulation):
     """Backup simulation."""
 
@@ -30,7 +39,17 @@ class Backup(Simulation):
         super().__init__()  # call the __init__ method of parent class
         self.nodes: list["Node"] = nodes
         self.simultaneous = simultaneous
-
+        self.counters = {
+            "backup": 0,
+            "restore": 0,
+            "fail": 0,
+            "recover": 0,
+            "offline": 0,
+            "online": 0,
+            "download": 0,
+            "upload": 0,
+            "safe_blocks": [],
+        }
         # we add to the event queue the first event of each node going online and of failing
         for node in nodes:
             self.schedule(node.arrival_time, Online(node))
@@ -159,6 +178,8 @@ class Node:
         if self.current_upload is not None:
             return
 
+        sim.counters["upload"] += 1
+
         # first find if we have a backup that a remote node needs
         for peer, block_id in self.remote_blocks_held.items():
             # if the block is not present locally and the peer is online and not downloading anything currently, then
@@ -205,6 +226,8 @@ class Node:
 
         if self.current_download is not None:
             return
+
+        sim.counters["download"] += 1
 
         # first find if we have a missing block to restore
         for block_id, (held_locally, peer) in enumerate(
@@ -265,6 +288,7 @@ class Online(NodeEvent):
     """A node goes online."""
 
     def process(self, sim: Backup) -> None:
+        sim.counters["online"] += 1
         node: Node = self.node
         if node.online or node.failed:
             return
@@ -280,6 +304,7 @@ class Recover(Online):
     """A node goes online after recovering from a failure."""
 
     def process(self, sim: Backup) -> None:
+        sim.counters["recover"] += 1
         node: Node = self.node
         sim.log_info(f"{node} recovers")
         node.failed = False
@@ -316,6 +341,7 @@ class Offline(Disconnection):
     """A node goes offline."""
 
     def process(self, sim: Backup) -> None:
+        sim.counters["offline"] += 1
         node: Node = self.node
         if node.failed or not node.online:
             return
@@ -329,6 +355,7 @@ class Fail(Disconnection):
     """A node fails and loses all local data."""
 
     def process(self, sim: Backup) -> None:
+        sim.counters["fail"] += 1
         sim.log_info(f"{self.node} fails")
         self.disconnect()
         node: Node = self.node
@@ -360,6 +387,7 @@ class TransferComplete(Event):
         assert self.uploader is not self.downloader
 
     def process(self, sim: Backup) -> None:
+        sim.counters["safe_blocks"].append(get_safe_blocks(sim.nodes))
         sim.log_info(
             f"{self.__class__.__name__} from {self.uploader} to {self.downloader}"
         )
@@ -386,6 +414,10 @@ class TransferComplete(Event):
 
 
 class BlockBackupComplete(TransferComplete):
+    def process(self, sim: Backup) -> None:
+        sim.counters["backup"] += 1
+        return super().process(sim)
+
     def update_block_state(self, simultaneous: bool = False) -> None:
         owner: Node = self.uploader
         peer: Node = self.downloader
@@ -398,6 +430,10 @@ class BlockBackupComplete(TransferComplete):
 
 
 class BlockRestoreComplete(TransferComplete):
+    def process(self, sim: Backup) -> None:
+        sim.counters["restore"] += 1
+        return super().process(sim)
+
     def update_block_state(self, simultaneous: bool = False) -> None:
         owner: Node = self.downloader
         owner.local_blocks[self.block_id] = True
@@ -455,6 +491,10 @@ def main() -> None:
     sim = Backup(nodes, args.simultaneous)
     sim.run(parse_timespan(args.max_t))
     sim.log_info("Simulation over")
+
+    if get_safe_blocks(sim.nodes) == sim.nodes[0].n:
+        print("data is safe")
+    print(sim.counters)
 
 
 if __name__ == "__main__":
