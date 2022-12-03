@@ -6,6 +6,7 @@ from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 from configparser import ConfigParser, SectionProxy
 from dataclasses import dataclass
 from random import expovariate
+import plotly.graph_objects as go
 
 # the humanfriendly library (https://humanfriendly.readthedocs.io/en/latest/) lets us pass parameters in human-readable
 # format (e.g., "500 KiB" or "5 days"). You can safely remove this if you don't want to install it on your system, but
@@ -49,9 +50,11 @@ class Backup(Simulation):
             "download": 0,
             "upload": 0,
             "safe_blocks": [],
+            "local_blocks": {}
         }
         # we add to the event queue the first event of each node going online and of failing
         for node in nodes:
+            self.counters["local_blocks"][node] = []
             self.schedule(node.arrival_time, Online(node))
             self.schedule(node.arrival_time + exp_rv(node.average_lifetime), Fail(node))
 
@@ -175,7 +178,7 @@ class Node:
 
         # sim.log_info(f"schedule_next_upload on {self}")
 
-        if self.current_upload is not None:
+        if not sim.simultaneous and self.current_upload is not None:
             return
 
         sim.counters["upload"] += 1
@@ -224,7 +227,7 @@ class Node:
 
         # sim.log_info(f"schedule_next_download on {self}")
 
-        if self.current_download is not None:
+        if not sim.simultaneous and self.current_download is not None:
             return
 
         sim.counters["download"] += 1
@@ -299,7 +302,6 @@ class Online(NodeEvent):
         # schedule the next offline event
         sim.schedule(exp_rv(node.average_uptime), Offline(node))
 
-
 class Recover(Online):
     """A node goes online after recovering from a failure."""
 
@@ -364,7 +366,7 @@ class Fail(Disconnection):
         # lose all remote data
         for owner, block_id in node.remote_blocks_held.items():
             owner.backed_up_blocks[block_id] = None
-            if owner.online and owner.current_upload is None:
+            if owner.online and (sim.simultaneous or owner.current_upload is None):
                 owner.schedule_next_upload(
                     sim
                 )  # this node may want to back up the missing block
@@ -388,6 +390,8 @@ class TransferComplete(Event):
 
     def process(self, sim: Backup) -> None:
         sim.counters["safe_blocks"].append(get_safe_blocks(sim.nodes))
+        for node in sim.nodes:
+            sim.counters["local_blocks"][node].append(sum(node.local_blocks))
         sim.log_info(
             f"{self.__class__.__name__} from {self.uploader} to {self.downloader}"
         )
@@ -401,6 +405,9 @@ class TransferComplete(Event):
         uploader.current_upload = downloader.current_download = None
         uploader.schedule_next_upload(sim)
         downloader.schedule_next_download(sim)
+        if sim.simultaneous:
+            uploader.schedule_next_download(sim)
+            downloader.schedule_next_upload(sim)
         for node in [uploader, downloader]:
             sim.log_info(
                 f"{node}: {sum(node.local_blocks)} local blocks, "
@@ -492,8 +499,22 @@ def main() -> None:
     sim.run(parse_timespan(args.max_t))
     sim.log_info("Simulation over")
 
+    fig = go.Figure()
+    fig2 = go.Figure()
+    local_blocks_means = []
+    node_names = [node.name for node in sim.nodes]
+    for node, local_blocks_counters in sim.counters["local_blocks"].items():
+        fig.add_trace(go.Scatter(x=list(range(500, 600)), y=local_blocks_counters[500:600], mode="lines+markers"))
+        local_blocks_means.append(sum(local_blocks_counters) / len(local_blocks_counters))
+    fig.show()
+    fig2.add_trace(go.Histogram(histfunc="sum", x=node_names, y=local_blocks_means))
+    fig2.show()
+
     if get_safe_blocks(sim.nodes) == sim.nodes[0].n:
         print("data is safe")
+
+    del(sim.counters["safe_blocks"])
+    del(sim.counters["local_blocks"])
     print(sim.counters)
 
 
