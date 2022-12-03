@@ -178,7 +178,7 @@ class Node:
 
         # sim.log_info(f"schedule_next_upload on {self}")
 
-        if not sim.simultaneous and self.current_upload is not None:
+        if self.current_upload is not None:
             return
 
         sim.counters["upload"] += 1
@@ -190,7 +190,7 @@ class Node:
             if (
                 peer.online
                 and not peer.local_blocks[block_id]
-                and (sim.simultaneous or peer.current_download is None)
+                and peer.current_download is None
             ):
                 sim.schedule_transfer(
                     uploader=self, downloader=peer, block_id=block_id, restore=True
@@ -213,7 +213,7 @@ class Node:
                 and peer.online
                 and peer not in remote_owners
                 and peer.free_space >= peer.block_size
-                and (sim.simultaneous or peer.current_download is None)
+                and peer.current_download is None
             ):
                 sim.schedule_transfer(
                     uploader=self, downloader=peer, block_id=block_id, restore=False
@@ -227,7 +227,7 @@ class Node:
 
         # sim.log_info(f"schedule_next_download on {self}")
 
-        if not sim.simultaneous and self.current_download is not None:
+        if self.current_download is not None:
             return
 
         sim.counters["download"] += 1
@@ -240,7 +240,7 @@ class Node:
                 not held_locally
                 and peer is not None
                 and peer.online
-                and (sim.simultaneous or peer.current_upload is None)
+                and peer.current_upload is None
             ):
                 sim.schedule_transfer(
                     uploader=peer, downloader=self, block_id=block_id, restore=True
@@ -254,7 +254,7 @@ class Node:
                 and peer.online
                 and peer not in self.backed_up_blocks
                 and self.free_space >= self.block_size
-                and (sim.simultaneous or peer.current_upload is None)
+                and peer.current_upload is None
             ):
                 block_id: int | None = peer.find_block_to_back_up()
                 if block_id is not None:
@@ -366,7 +366,7 @@ class Fail(Disconnection):
         # lose all remote data
         for owner, block_id in node.remote_blocks_held.items():
             owner.backed_up_blocks[block_id] = None
-            if owner.online and (sim.simultaneous or owner.current_upload is None):
+            if owner.online and owner.current_upload is None:
                 owner.schedule_next_upload(
                     sim
                 )  # this node may want to back up the missing block
