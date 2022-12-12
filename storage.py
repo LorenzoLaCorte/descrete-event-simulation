@@ -22,13 +22,16 @@ def exp_rv(mean: float) -> float:
     return expovariate(1 / mean)
 
 
-def get_safe_blocks(nodes: list["Node"]) -> int:
-    if not nodes:
-        return 0
-    result = [False] * nodes[0].n
+def get_lost_blocks(nodes: list["Node"]) -> int:
+    lost: int = 0
     for node in nodes:
-        result = [x or y for x, y in zip(result, node.local_blocks)]
-    return sum(result)
+        count: int = 0
+        for i in range(node.n):
+            if node.local_blocks[i] or node.backed_up_blocks[i]:
+                count += 1
+        if count < node.k:
+            lost += node.n - count
+    return lost
 
 
 class Backup(Simulation):
@@ -49,7 +52,7 @@ class Backup(Simulation):
             "online": 0,
             "download": 0,
             "upload": 0,
-            "safe_blocks": [],
+            "lost_blocks": [],
             "local_blocks": {}
         }
         # we add to the event queue the first event of each node going online and of failing
@@ -252,7 +255,7 @@ class Node:
             if (
                 peer is not self
                 and peer.online
-                and peer not in self.backed_up_blocks
+                and peer not in self.remote_blocks_held
                 and self.free_space >= self.block_size
                 and peer.current_upload is None
             ):
@@ -389,7 +392,7 @@ class TransferComplete(Event):
         assert self.uploader is not self.downloader
 
     def process(self, sim: Backup) -> None:
-        sim.counters["safe_blocks"].append(get_safe_blocks(sim.nodes))
+        sim.counters["lost_blocks"].append(get_lost_blocks(sim.nodes))
         for node in sim.nodes:
             sim.counters["local_blocks"][node].append(sum(node.local_blocks))
         sim.log_info(
@@ -510,10 +513,10 @@ def main() -> None:
     fig2.add_trace(go.Histogram(histfunc="sum", x=node_names, y=local_blocks_means))
     fig2.show()
 
-    if get_safe_blocks(sim.nodes) == sim.nodes[0].n:
+    if get_lost_blocks(sim.nodes) == 0:
         print("data is safe")
 
-    del(sim.counters["safe_blocks"])
+    del(sim.counters["lost_blocks"])
     del(sim.counters["local_blocks"])
     print(sim.counters)
 
