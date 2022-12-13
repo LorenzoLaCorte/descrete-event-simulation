@@ -2,16 +2,13 @@
 
 import logging
 import random
+import sys
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 from configparser import ConfigParser, SectionProxy
 from dataclasses import dataclass
 from random import expovariate
-import plotly.graph_objects as go
+from typing import Any
 
-# the humanfriendly library (https://humanfriendly.readthedocs.io/en/latest/) lets us pass parameters in human-readable
-# format (e.g., "500 KiB" or "5 days"). You can safely remove this if you don't want to install it on your system, but
-# then you'll need to handle sizes in bytes and time spans in seconds--or write your own alternative.
-# It should be trivial to install (e.g., apt install python3-humanfriendly or conda/pip install humanfriendly).
 from humanfriendly import format_timespan, parse_size, parse_timespan
 
 from discrete_event_sim import Event, Simulation
@@ -42,22 +39,9 @@ class Backup(Simulation):
     def __init__(self, nodes: list["Node"], simultaneous: bool = False) -> None:
         super().__init__()  # call the __init__ method of parent class
         self.nodes: list["Node"] = nodes
-        self.simultaneous = simultaneous
-        self.counters = {
-            "backup": 0,
-            "restore": 0,
-            "fail": 0,
-            "recover": 0,
-            "offline": 0,
-            "online": 0,
-            "download": 0,
-            "upload": 0,
-            "lost_blocks": [],
-            "local_blocks": {}
-        }
+        self.simultaneous: bool = simultaneous
         # we add to the event queue the first event of each node going online and of failing
         for node in nodes:
-            self.counters["local_blocks"][node] = []
             self.schedule(node.arrival_time, Online(node))
             self.schedule(node.arrival_time + exp_rv(node.average_lifetime), Fail(node))
 
@@ -73,7 +57,7 @@ class Backup(Simulation):
             assert uploader.current_upload is None
             assert downloader.current_download is None
 
-        block_size = downloader.block_size if restore else uploader.block_size
+        block_size: int = downloader.block_size if restore else uploader.block_size
 
         speed: float = min(
             uploader.upload_speed, downloader.download_speed
@@ -87,10 +71,10 @@ class Backup(Simulation):
         self.schedule(delay, event)
         uploader.current_upload = downloader.current_download = event
 
-        # self.log_info(
-        #     f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"
-        #     f" in {format_timespan(delay)}"
-        # )
+        self.log_info(
+            f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"
+            f" in {format_timespan(delay)}"
+        )
 
     def log_info(self, msg: str) -> None:
         """Override method to get human-friendly logging for time."""
@@ -168,7 +152,7 @@ class Node:
         # find a block that we have locally but not remotely
         # check `enumerate` and `zip`at https://docs.python.org/3/library/functions.html
         for block_id, (held_locally, peer) in enumerate(
-            zip(self.local_blocks, self.backed_up_blocks)
+            zip(self.local_blocks, self.backed_up_blocks, strict=False)
         ):
             if held_locally and peer is None:
                 return block_id
@@ -179,12 +163,10 @@ class Node:
 
         assert self.online
 
-        # sim.log_info(f"schedule_next_upload on {self}")
+        sim.log_info(f"schedule_next_upload on {self}")
 
         if self.current_upload is not None:
             return
-
-        sim.counters["upload"] += 1
 
         # first find if we have a backup that a remote node needs
         for peer, block_id in self.remote_blocks_held.items():
@@ -204,7 +186,9 @@ class Node:
         block_id: int | None = self.find_block_to_back_up()
         if block_id is None:
             return
-        # sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
+
+        sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
+
         remote_owners: set["Node"] = set(
             node for node in self.backed_up_blocks if node is not None
         )  # nodes having one block
@@ -228,16 +212,14 @@ class Node:
 
         assert self.online
 
-        # sim.log_info(f"schedule_next_download on {self}")
+        sim.log_info(f"schedule_next_download on {self}")
 
         if self.current_download is not None:
             return
 
-        sim.counters["download"] += 1
-
         # first find if we have a missing block to restore
         for block_id, (held_locally, peer) in enumerate(
-            zip(self.local_blocks, self.backed_up_blocks)
+            zip(self.local_blocks, self.backed_up_blocks, strict=False)
         ):
             if (
                 not held_locally
@@ -294,7 +276,6 @@ class Online(NodeEvent):
     """A node goes online."""
 
     def process(self, sim: Backup) -> None:
-        sim.counters["online"] += 1
         node: Node = self.node
         if node.online or node.failed:
             return
@@ -305,11 +286,11 @@ class Online(NodeEvent):
         # schedule the next offline event
         sim.schedule(exp_rv(node.average_uptime), Offline(node))
 
+
 class Recover(Online):
     """A node goes online after recovering from a failure."""
 
     def process(self, sim: Backup) -> None:
-        sim.counters["recover"] += 1
         node: Node = self.node
         sim.log_info(f"{node} recovers")
         node.failed = False
@@ -346,7 +327,6 @@ class Offline(Disconnection):
     """A node goes offline."""
 
     def process(self, sim: Backup) -> None:
-        sim.counters["offline"] += 1
         node: Node = self.node
         if node.failed or not node.online:
             return
@@ -360,7 +340,6 @@ class Fail(Disconnection):
     """A node fails and loses all local data."""
 
     def process(self, sim: Backup) -> None:
-        sim.counters["fail"] += 1
         sim.log_info(f"{self.node} fails")
         self.disconnect()
         node: Node = self.node
@@ -392,9 +371,6 @@ class TransferComplete(Event):
         assert self.uploader is not self.downloader
 
     def process(self, sim: Backup) -> None:
-        sim.counters["lost_blocks"].append(get_lost_blocks(sim.nodes))
-        for node in sim.nodes:
-            sim.counters["local_blocks"][node].append(sum(node.local_blocks))
         sim.log_info(
             f"{self.__class__.__name__} from {self.uploader} to {self.downloader}"
         )
@@ -425,7 +401,6 @@ class TransferComplete(Event):
 
 class BlockBackupComplete(TransferComplete):
     def process(self, sim: Backup) -> None:
-        sim.counters["backup"] += 1
         return super().process(sim)
 
     def update_block_state(self, simultaneous: bool = False) -> None:
@@ -441,7 +416,6 @@ class BlockBackupComplete(TransferComplete):
 
 class BlockRestoreComplete(TransferComplete):
     def process(self, sim: Backup) -> None:
-        sim.counters["restore"] += 1
         return super().process(sim)
 
     def update_block_state(self, simultaneous: bool = False) -> None:
@@ -453,7 +427,7 @@ class BlockRestoreComplete(TransferComplete):
             owner.local_blocks = [True] * owner.n
 
 
-def main() -> None:
+if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
     parser.add_argument("config", help="configuration file")
     parser.add_argument("--max-t", default="100 years")
@@ -470,7 +444,7 @@ def main() -> None:
         )  # output info on stdout
 
     # functions to parse every parameter of peer configuration
-    parsing_functions = [
+    parsing_functions: list[tuple[str, Any]] = [
         ("n", int),
         ("k", int),
         ("data_size", parse_size),
@@ -498,28 +472,15 @@ def main() -> None:
             Node(f"{node_class}-{i}", *cfg)  # type: ignore
             for i in range(class_config.getint("number"))
         )
-    sim = Backup(nodes, args.simultaneous)
+
+    print(f"\nStarting simulation with:\n{args}\n")
+    config.write(sys.stdout)
+
+    sim: Backup = Backup(nodes, args.simultaneous)
     sim.run(parse_timespan(args.max_t))
     sim.log_info("Simulation over")
 
-    fig = go.Figure()
-    fig2 = go.Figure()
-    local_blocks_means = []
-    node_names = [node.name for node in sim.nodes]
-    for node, local_blocks_counters in sim.counters["local_blocks"].items():
-        fig.add_trace(go.Scatter(x=list(range(500, 600)), y=local_blocks_counters[500:600], mode="lines+markers"))
-        local_blocks_means.append(sum(local_blocks_counters) / len(local_blocks_counters))
-    fig.show()
-    fig2.add_trace(go.Histogram(histfunc="sum", x=node_names, y=local_blocks_means))
-    fig2.show()
-
     if get_lost_blocks(sim.nodes) == 0:
-        print("data is safe")
-
-    del(sim.counters["lost_blocks"])
-    del(sim.counters["local_blocks"])
-    print(sim.counters)
-
-
-if __name__ == "__main__":
-    main()
+        print("Data is safe")
+    else:
+        print("Data has been lost")

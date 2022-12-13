@@ -8,7 +8,7 @@ from collections import Counter
 
 from matplotlib import pyplot as plt  # type: ignore
 
-from discrete_event_sim import Event, Simulation
+from src.discrete_event_sim import Event, Simulation
 
 
 class Condition(enum.Enum):
