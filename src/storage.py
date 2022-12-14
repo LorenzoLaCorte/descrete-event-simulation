@@ -11,7 +11,7 @@ from typing import Any
 
 from humanfriendly import format_timespan, parse_size, parse_timespan
 
-from discrete_event_sim import Event, Simulation
+from .discrete_event_sim import Event, Simulation
 
 
 def exp_rv(mean: float) -> float:

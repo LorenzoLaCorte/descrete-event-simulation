@@ -1,12 +1,25 @@
-#!/usr/bin/env python
-
-import csv
 import math
-from argparse import ArgumentParser, BooleanOptionalAction, Namespace
-from collections import deque
+from collections import defaultdict, deque
 from random import expovariate, randint, sample
 
-from discrete_event_sim import Event, Simulation
+from .discrete_event_sim import Event, Simulation
+
+
+class MMNStats:
+    def __init__(self, sim: "MMN") -> None:
+        self.queues_lengths: defaultdict[int, int] = defaultdict(int)
+        self.length_checker_delay: float = (sim.max_t * 0.001) / (sim.lambd * sim.n)
+        self.last_queues_sample_indexes: list[int] = []
+
+
+class LengthChecker(Event):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def process(self, sim: "MMN") -> None:
+        for index in sim.stats.last_queues_sample_indexes:
+            sim.stats.queues_lengths[len(sim.queues[index])] += 1
+        sim.schedule(sim.stats.length_checker_delay, LengthChecker())
 
 
 class MMN(Simulation):
@@ -39,7 +52,10 @@ class MMN(Simulation):
         self.completion_rate: float = mu
         self.rand: bool = rand
         self.queues_sample: float = queues_sample
+        self.max_t: float = max_t
+        self.stats: MMNStats = MMNStats(self)
         self.schedule(0, Arrival(0, self.choose_queue()))
+        self.schedule(self.stats.length_checker_delay, LengthChecker())
 
     def choose_queue(self) -> int:
         if self.rand:
@@ -47,6 +63,7 @@ class MMN(Simulation):
         sample_queues: list[int] = sample(
             range(len(self.queues)), math.ceil(self.n * self.queues_sample)
         )
+        self.stats.last_queues_sample_indexes = sample_queues
         return min(sample_queues, key=lambda index: self.queue_len(index))
 
     def schedule_arrival(self, job_id: int) -> None:
@@ -103,38 +120,3 @@ class Completion(Event):
             sim.schedule_completion(job, self.queue_index)
         else:
             sim.running[self.queue_index] = None
-
-
-if __name__ == "__main__":
-    parser: ArgumentParser = ArgumentParser()
-    parser.add_argument("--lambd", type=float, default=0.7)
-    parser.add_argument("--mu", type=float, default=1)
-    parser.add_argument("--max-t", type=float, default=1_000_000)
-    parser.add_argument("--n", type=int, default=1)
-    parser.add_argument("--csv", help="CSV file in which to store results")
-    parser.add_argument("--random", default=False, action=BooleanOptionalAction)
-    parser.add_argument("--queues-sample", type=float, default=0.1)
-    args: Namespace = parser.parse_args()
-
-    if args.queues_sample <= 0 or args.queues_sample > 1:
-        raise ValueError("queues sample must be > 0 and <= 1")
-
-    print(f"\nStarting simulation with:\n{args}\n")
-
-    sim: MMN = MMN(
-        args.lambd, args.mu, args.n, args.random, args.queues_sample, args.max_t
-    )
-    sim.run(args.max_t)
-
-    completions: dict[int, float] = sim.completions
-    W: float = (
-        sum(completions.values()) - sum(sim.arrivals[job_id] for job_id in completions)
-    ) / len(completions)
-
-    print(f"Average time spent in the system: {W}")
-    print(f"Theoretical expectation for random server choice: {1 / (1 - args.lambd)}")
-
-    if args.csv is not None:
-        with open(args.csv, "a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([args.lambd, args.mu, args.max_t, W])

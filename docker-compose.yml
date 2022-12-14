@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  mmn-test:
+    container_name: mmn-test
+    build:
+      context: .
+      dockerfile: Dockerfile.slim
+    command: python3 tests/mmn.py --multiprocessing-level 2
+    volumes:
+      - ./:/dc-assignments
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /dc-assignments
+    environment:
+      - TZ=Europe/Rome
+    restart: on-failure
