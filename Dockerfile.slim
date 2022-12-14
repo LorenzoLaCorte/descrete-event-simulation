@@ -14,7 +14,7 @@ RUN apt update -y \
 
 WORKDIR /dc-assignments
 
-COPY poetry.lock pyproject.toml /dc-assignments/
+COPY poetry.lock pyproject.toml README.md /dc-assignments/
 COPY src /dc-assignments/src
 
 RUN poetry config virtualenvs.create false \
