@@ -157,7 +157,7 @@ if __name__ == "__main__":
             args.n = n
             if n == 1000:
                 args.max_t = 10_000
-            for mu in [1, 1.25, 1.5]:
+            for mu in [1, 1.5]:
                 args.mu = mu
                 if args.multiprocessing_level > 0:
                     process = multiprocessing.Process(target=start_test, args=(args,))

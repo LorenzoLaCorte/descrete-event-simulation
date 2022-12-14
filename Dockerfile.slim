@@ -8,7 +8,6 @@ ENV PIP_NO_CACHE_DIR=off
 ENV PIP_DISABLE_PIP_VERSION_CHECK=on
 ENV PIP_DEFAULT_TIMEOUT=100
 
-# install and setup poetry
 RUN apt update -y \
     && pip install -U pip \
     && pip install poetry
@@ -18,4 +17,4 @@ WORKDIR /dc-assignments
 COPY poetry.lock pyproject.toml /dc-assignments/
 
 RUN poetry config virtualenvs.create false \
-  && poetry install --no-interaction --no-ansi --without dev
+    && poetry install --no-interaction --no-ansi --without dev
