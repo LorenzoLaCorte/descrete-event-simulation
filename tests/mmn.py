@@ -143,7 +143,7 @@ if __name__ == "__main__":
     parser.add_argument("--queues-sample", type=float, default=0.1)
     args: Namespace = parser.parse_args()
 
-    for n in [10, 100, 1000]:
+    for n in [1000]:
         args.n = n
         args.max_t = 10_000
         for mu in [1]:
