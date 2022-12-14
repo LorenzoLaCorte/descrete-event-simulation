@@ -1,18 +1,22 @@
-from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 import math
 import multiprocessing
-from pathlib import Path
 import os
+from argparse import ArgumentParser, BooleanOptionalAction, Namespace
+from copy import deepcopy
+from pathlib import Path
 
 import plotly.graph_objects as go  # type: ignore
 import plotly.io as pio  # type: ignore
 from plotly.subplots import make_subplots  # type: ignore
+
 from src import MMN
 
 pio.kaleido.scope.mathjax = None
 
 
-RESULTS_DIR_PATH: Path = (Path(__file__).absolute().parent.parent).joinpath("results").joinpath("MMN")
+RESULTS_DIR_PATH: Path = (
+    (Path(__file__).absolute().parent.parent).joinpath("results").joinpath("MMN")
+)
 
 
 def start_simulation(
@@ -62,18 +66,11 @@ def start_simulation(
 
 def start_test(args: Namespace) -> None:  # noqa: C901
     queues_sample_dict: dict[float, tuple[int, int]] = {
-        0.1: (1, 1),
-        0.2: (1, 2),
-        0.5: (2, 1),
-        1: (2, 2),
+        1 / args.n: (1, 1),
+        2 / args.n: (1, 2),
+        5 / args.n: (2, 1),
+        10 / args.n: (2, 2),
     }
-    if args.n == 1000:
-        queues_sample_dict = {
-            0.001: (1, 1),
-            0.002: (1, 2),
-            0.005: (2, 1),
-            0.01: (2, 2),
-        }
     fig: go.Figure = make_subplots(
         rows=2,
         cols=2,
@@ -82,8 +79,7 @@ def start_test(args: Namespace) -> None:  # noqa: C901
             for queues_sample in queues_sample_dict.keys()
         ],
     )
-    supermarket_processes: list[multiprocessing.Process] = []
-    random_processes: list[multiprocessing.Process] = []
+    processes: list[multiprocessing.Process] = []
     try:
         for queues_sample, pos in queues_sample_dict.items():
             row: int
@@ -98,22 +94,23 @@ def start_test(args: Namespace) -> None:  # noqa: C901
             }.items():
                 args.lambd = lambd
                 if args.multiprocessing_level > 1:
-                    args.random = False
-                    supermarket_process: multiprocessing.Process = multiprocessing.Process(target=start_simulation, args=(fig, args, color, row, col,))
-                    supermarket_processes.append(supermarket_process)
-                    random_process: multiprocessing.Process = multiprocessing.Process(target=start_simulation, args=(fig, args, color, row, col,))
-                    random_processes.append(random_process)
+                    process: multiprocessing.Process = multiprocessing.Process(
+                        target=start_simulation,
+                        args=(
+                            fig,
+                            deepcopy(args),
+                            color,
+                            row,
+                            col,
+                        ),
+                    )
+                    processes.append(process)
                 else:
-                    args.random = False
                     start_simulation(fig, args, color, row, col)
-                    args.random = True
-                    start_simulation(fig, args, color, row, col)
-
-        for process in supermarket_processes:
+        for process in processes:
             process.start()
-        for process in supermarket_processes:
+        for process in processes:
             process.join()
-
         fig.update_layout(  # type: ignore
             {
                 "autosize": False,
@@ -127,11 +124,6 @@ def start_test(args: Namespace) -> None:  # noqa: C901
         fig.update_xaxes({"range": [0, 14], "tick0": 0, "dtick": 2})  # type: ignore
         fig.update_yaxes({"range": [0, 1], "tick0": 0, "dtick": 0.2})  # type: ignore
         fig.write_image(RESULTS_DIR_PATH.joinpath(f"n{args.n}mu{args.mu}.pdf"))  # type: ignore
-
-        for process in random_processes:
-            process.start()
-        for process in random_processes:
-            process.join()
     except KeyboardInterrupt as e:
         for process in processes:
             process.kill()
@@ -151,23 +143,9 @@ if __name__ == "__main__":
     parser.add_argument("--queues-sample", type=float, default=0.1)
     args: Namespace = parser.parse_args()
 
-    processes: list[multiprocessing.Process] = []
-    try:
-        for n in [10, 50, 100, 1000]:
-            args.n = n
-            if n == 1000:
-                args.max_t = 10_000
-            for mu in [1, 1.5]:
-                args.mu = mu
-                if args.multiprocessing_level > 0:
-                    process = multiprocessing.Process(target=start_test, args=(args,))
-                    processes.append(process)
-                    process.start()
-                else:
-                    start_test(args)
-        for process in processes:
-            process.join()
-    except KeyboardInterrupt as e:
-        for process in processes:
-            process.kill()
-        raise e
+    for n in [10, 100, 1000]:
+        args.n = n
+        args.max_t = 10_000
+        for mu in [1]:
+            args.mu = mu
+            start_test(args)

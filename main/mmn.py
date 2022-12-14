@@ -1,10 +1,10 @@
 import csv
 import math
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
+
 from plotly import graph_objects as go  # type: ignore
 
 from src import MMN
-
 
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
@@ -54,15 +54,14 @@ if __name__ == "__main__":
                 line_width=3,
                 name=str(args.lambd),
                 mode="lines",
-                showlegend=True
+                showlegend=True,
             )
         )
         fig.update_layout(  # type: ignore
             {
                 "title": {
-                    "text":
-                        "Simultation using supermarket model with "
-                        f"{math.ceil(args.n * args.queues_sample)} choice/s and n={args.n} mu={args.mu} max_t={args.max_t}",
+                    "text": "Simultation using supermarket model with "
+                    f"{math.ceil(args.n * args.queues_sample)} choice/s and n={args.n} mu={args.mu} max_t={args.max_t}",
                     "y": 0.95,
                     "x": 0.5,
                     "xanchor": "center",
