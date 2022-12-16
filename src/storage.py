@@ -351,10 +351,11 @@ class Fail(Disconnection):
         if not node.lost and get_safe_node_blocks(node) < node.k:
             print("Node lost")
             node.lost = True
-            node.free_space = node.storage_size
+            node.free_space = node.storage_size - node.block_size * node.n
             for remote_node in node.backed_up_blocks:
                 if remote_node:
                     remote_node.remote_blocks_held.pop(node, None)
+                    remote_node.free_space += remote_node.block_size
             node.backed_up_blocks = [None] * node.n
         # ! new extension
         # lose all remote data
