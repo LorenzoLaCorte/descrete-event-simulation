@@ -81,3 +81,11 @@ if __name__ == "__main__":
         print("Data is safe")
     else:
         print("Data has been lost")
+
+    for node in nodes:
+        print(node.name)
+        print(node.local_blocks)
+        print([len(n) for n in node.backed_up_blocks])
+        for n2 in nodes:
+            print(len(node.remote_blocks_held[n2]))
+            print(node in n2.remote_blocks_held and n2.remote_blocks_held[node] != [])
