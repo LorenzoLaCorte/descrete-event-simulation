@@ -7,15 +7,13 @@ from typing import Any
 
 from humanfriendly import parse_size, parse_timespan
 
-from src import Backup
-from src.storage import Node, get_lost_blocks
-
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
     parser.add_argument("config", help="configuration file")
     parser.add_argument("--max-t", default="100 years")
     parser.add_argument("--seed", help="random seed")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--extension", default="")
     args: Namespace = parser.parse_args()
 
     if args.seed:
@@ -24,6 +22,20 @@ if __name__ == "__main__":
         logging.basicConfig(
             format="{levelname}:{message}", level=logging.INFO, style="{"
         )  # output info on stdout
+
+    if args.extension == "base":
+        from src.storage_base_extension import Backup, Node, get_lost_blocks
+
+        print("Using base extension")
+    elif args.extension == "advanced":
+        from src.storage_advanced_extension import (Backup, Node,
+                                                    get_lost_blocks)
+
+        print("Using advanced extension")
+    else:
+        from src.storage import Backup, Node, get_lost_blocks
+
+        print("Using normal version")
 
     # functions to parse every parameter of peer configuration
     parsing_functions: list[tuple[str, Any]] = [
@@ -58,33 +70,14 @@ if __name__ == "__main__":
     print(f"\nStarting simulation with:\n{args}\n")
     config.write(sys.stdout)
 
-    lost_blocks_arr: list[int] = []
-    for _ in range(100):
-        nodes: list[Node] = []  # we build the list of nodes to pass to the Backup class
-        for node_class in config.sections():
-            class_config: SectionProxy = config[node_class]
-            # list comprehension: https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions
-            cfg: list[str | int | float] = [
-                parse(class_config[name]) for name, parse in parsing_functions
-            ]
-            # the `callable(p1, p2, *args)` idiom is equivalent to `callable(p1, p2, args[0], args[1], ...)
-            nodes.extend(
-                Node(f"{node_class}-{i}", *cfg)  # type: ignore
-                for i in range(class_config.getint("number"))
-            )
-        sim: Backup = Backup(nodes)
-        sim.run(parse_timespan(args.max_t))
-        sim.log_info("Simulation over")
+    sim: Backup = Backup(nodes)  # type: ignore
+    sim.run(parse_timespan(args.max_t))
+    sim.log_info("Simulation over")
 
-        lost_blocks: int = get_lost_blocks(sim.nodes)
-        print(f"Lost blocks: {lost_blocks}")
+    lost_blocks: int = get_lost_blocks(sim.nodes)  # type: ignore
+    print(f"Lost blocks: {lost_blocks}")
 
-        if lost_blocks == 0:
-            print("Data is safe")
-        else:
-            print("Data has been lost")
-
-        lost_blocks_arr.append(lost_blocks)
-
-    print(lost_blocks_arr)
-    print(sum(lost_blocks_arr) / len(lost_blocks_arr))
+    if lost_blocks == 0:
+        print("Data is safe")
+    else:
+        print("Data has been lost")

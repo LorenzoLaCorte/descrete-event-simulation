@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from random import expovariate
 
@@ -134,26 +135,33 @@ class Node:
 
         # backed_up_blocks[block_id] is the peer we're storing that block on, or None if it's not backed up yet;
         # we start with no blocks backed up
-        self.backed_up_blocks: list[Node | None] = [None] * self.n
+        self.backed_up_blocks: list[list[Node]] = [[]] * self.n  # ! new extension
 
         # (owner -> block_id) mapping for remote blocks stored
-        self.remote_blocks_held: dict[Node, int] = {}
+        self.remote_blocks_held: dict[Node, list[int]] = defaultdict(
+            list
+        )  # ! new extension
 
         # current uploads and downloads, stored as a reference to the relative TransferComplete event
         self.current_upload: TransferComplete | None = None
         self.current_download: TransferComplete | None = None
 
-    def find_block_to_back_up(self) -> int | None:
+    def find_block_to_back_up(self, sim: Backup) -> int | None:
         """Returns the block id of a block that needs backing up, or None if there are none."""
 
         # find a block that we have locally but not remotely
         # check `enumerate` and `zip`at https://docs.python.org/3/library/functions.html
-        for block_id, (held_locally, peer) in enumerate(
+        for block_id, (held_locally, peers) in enumerate(
             zip(self.local_blocks, self.backed_up_blocks, strict=False)
         ):
-            if held_locally and not peer:
+            if held_locally and not peers:  # ! new extension
                 return block_id
-        return None
+        # ! new extension
+        for node in sim.nodes:
+            if node.online and any(not peers for peers in node.backed_up_blocks):
+                return None
+        return self.backed_up_blocks.index(sorted(self.backed_up_blocks, key=len)[0])
+        # ! new extension
 
     def schedule_next_upload(self, sim: Backup) -> None:
         """Schedule the next upload, if any."""
@@ -166,37 +174,45 @@ class Node:
             return
 
         # first find if we have a backup that a remote node needs
-        for peer, block_id in self.remote_blocks_held.items():
+        for peer, block_ids in self.remote_blocks_held.items():
             # if the block is not present locally and the peer is online and not downloading anything currently, then
             # schedule the restore from self to peer of block_id
-            if (
-                peer.online
-                and not peer.local_blocks[block_id]
-                and peer.current_download is None
-            ):
-                sim.schedule_transfer(
-                    uploader=self, downloader=peer, block_id=block_id, restore=True
-                )
-                return  # we have found our upload, we stop
+            for block_id in block_ids:  # ! new extension
+                if (
+                    peer.online
+                    and not peer.local_blocks[block_id]
+                    and peer.current_download is None
+                ):
+                    sim.schedule_transfer(
+                        uploader=self, downloader=peer, block_id=block_id, restore=True
+                    )
+                    return  # we have found our upload, we stop
 
         # try to back up a block on a locally held remote node
-        block_id: int | None = self.find_block_to_back_up()
+        block_id: int | None = self.find_block_to_back_up(sim)
         if block_id is None:
             return
 
         sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
 
-        remote_owners = set(
-            node for node in self.backed_up_blocks if node is not None
-        )  # nodes having one block
-
+        # ! new extension
+        possible_peers: list["Node"] = sorted(
+            list(set(node for nodes in self.backed_up_blocks for node in nodes)),
+            key=lambda node: node.free_space,
+        )
         for peer in sim.nodes:
+            if peer not in possible_peers:
+                possible_peers.insert(0, peer)
+        # ! new extension
+
+        for peer in possible_peers:
             # if the peer is not self, is online, is not among the remote owners, has enough space and is not
             # downloading anything currently, schedule the backup of block_id from self to peer
             if (
                 peer is not self
                 and peer.online
-                and peer not in remote_owners
+                # ! new extension
+                # and peer not in remote_owners
                 and peer.free_space >= peer.block_size
                 and peer.current_download is None
             ):
@@ -216,30 +232,31 @@ class Node:
             return
 
         # first find if we have a missing block to restore
-        for block_id, (held_locally, peer) in enumerate(
+        for block_id, (held_locally, peers) in enumerate(
             zip(self.local_blocks, self.backed_up_blocks, strict=False)
         ):
-            if (
-                not held_locally
-                and peer is not None
-                and peer.online
-                and peer.current_upload is None
-            ):
-                sim.schedule_transfer(
-                    uploader=peer, downloader=self, block_id=block_id, restore=True
-                )
-                return  # we are done in this case
+            for peer in peers:  # ! new extension
+                if (
+                    not held_locally
+                    and peer is not None
+                    and peer.online
+                    and peer.current_upload is None
+                ):
+                    sim.schedule_transfer(
+                        uploader=peer, downloader=self, block_id=block_id, restore=True
+                    )
+                    return  # we are done in this case
 
         # try to back up a block for a remote node
         for peer in sim.nodes:
             if (
                 peer is not self
                 and peer.online
-                and peer not in self.remote_blocks_held
+                # and peer not in self.remote_blocks_held  # ! new extension
                 and self.free_space >= self.block_size
                 and peer.current_upload is None
             ):
-                block_id: int | None = peer.find_block_to_back_up()
+                block_id: int | None = peer.find_block_to_back_up(sim)
                 if block_id is not None:
                     sim.schedule_transfer(
                         uploader=peer, downloader=self, block_id=block_id, restore=False
@@ -292,7 +309,12 @@ class Recover(Online):
         node: Node = self.node
         sim.log_info(f"{node} recovers")
         node.failed = False
-        node.free_space = node.storage_size - node.block_size * node.n
+        # ! new extension
+        if node.failed:
+            node.free_space = node.storage_size
+        else:
+            node.free_space = node.storage_size - node.block_size * node.n
+        # ! new extension
         super().process(sim)
         sim.schedule(exp_rv(node.average_lifetime), Fail(node))
 
@@ -346,19 +368,20 @@ class Fail(Disconnection):
         # ! new extension
         if not node.lost and get_safe_node_blocks(node) < node.k:
             node.lost = True
-            for remote_node in node.backed_up_blocks:
-                if remote_node:
-                    remote_node.remote_blocks_held.pop(node, None)
-                    remote_node.free_space += remote_node.block_size
-            node.backed_up_blocks = [None] * node.n
+            for nodes in node.backed_up_blocks:
+                for remote_node in nodes:
+                    remote_node.free_space += remote_node.block_size * len(remote_node.remote_blocks_held[node])
+                    remote_node.remote_blocks_held[node] = []
+            node.backed_up_blocks = [[]] * node.n
         # ! new extension
         # lose all remote data
-        for owner, block_id in node.remote_blocks_held.items():
-            owner.backed_up_blocks[block_id] = None
-            if owner.online and owner.current_upload is None:
-                owner.schedule_next_upload(
-                    sim
-                )  # this node may want to back up the missing block
+        for owner, block_ids in node.remote_blocks_held.items():
+            for block_id in block_ids:  # ! new extension
+                owner.backed_up_blocks[block_id].remove(node)  # ! new extension
+                if owner.online and owner.current_upload is None:
+                    owner.schedule_next_upload(
+                        sim
+                    )  # this node may want to back up the missing block
         node.remote_blocks_held.clear()
         # schedule the next online and recover events
         recover_time: float = exp_rv(node.average_recover_time)
@@ -411,8 +434,8 @@ class BlockBackupComplete(TransferComplete):
         peer: Node = self.downloader
         peer.free_space -= owner.block_size
         assert peer.free_space >= 0
-        owner.backed_up_blocks[self.block_id] = peer
-        peer.remote_blocks_held[owner] = self.block_id
+        owner.backed_up_blocks[self.block_id].append(peer)  # ! new extension
+        peer.remote_blocks_held[owner].append(self.block_id)  # ! new extension
 
 
 class BlockRestoreComplete(TransferComplete):

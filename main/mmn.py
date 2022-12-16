@@ -4,7 +4,7 @@ from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 
 from plotly import graph_objects as go  # type: ignore
 
-from src import MMN
+from src.mmn_queue import MMN
 
 if __name__ == "__main__":
     parser: ArgumentParser = ArgumentParser()
