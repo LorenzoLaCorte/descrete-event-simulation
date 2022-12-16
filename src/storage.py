@@ -13,6 +13,10 @@ def exp_rv(mean: float) -> float:
     return expovariate(1 / mean)
 
 
+def print_nodes_stats(nodes: list["Node"]) -> None:
+    return
+
+
 def get_safe_node_blocks(node: "Node") -> int:
     count: int = 0
     for i in range(node.n):
@@ -26,7 +30,7 @@ def get_lost_blocks(nodes: list["Node"]) -> int:
     for node in nodes:
         count: int = get_safe_node_blocks(node)
         if count < node.k:
-            lost += node.n - count
+            lost += node.n
     return lost
 
 
@@ -367,8 +371,10 @@ class Fail(Disconnection):
         self.disconnect()
         node: Node = self.node
         node.failed = True
+        node.local_blocks = [False] * node.n  # lose all local data
         # ! new extension
         if not node.lost and get_safe_node_blocks(node) < node.k:
+            print("Node lost")
             node.lost = True
             node.free_space = node.storage_size
             for nodes in node.backed_up_blocks:
@@ -376,7 +382,6 @@ class Fail(Disconnection):
                     remote_node.remote_blocks_held[node] = []
             node.backed_up_blocks = [[]] * node.n
         # ! new extension
-        node.local_blocks = [False] * node.n  # lose all local data
         # lose all remote data
         for owner, block_ids in node.remote_blocks_held.items():
             for block_id in block_ids:  # ! new extension
