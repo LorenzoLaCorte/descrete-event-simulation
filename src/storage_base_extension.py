@@ -112,6 +112,8 @@ class Node:
 
     def __post_init__(self) -> None:
         """Compute other data dependent on config values and set up initial state."""
+        self.lost = False  # ! new extension
+
         # whether this node is online. All nodes start offline.
         self.online: bool = False
 
@@ -341,6 +343,17 @@ class Fail(Disconnection):
         node: Node = self.node
         node.failed = True
         node.local_blocks = [False] * node.n  # lose all local data
+        # ! new extension
+        if not node.lost and get_safe_node_blocks(node) < node.k:
+            print("Node lost")
+            node.lost = True
+            node.free_space = node.storage_size - node.block_size * node.n
+            for remote_node in node.backed_up_blocks:
+                if remote_node:
+                    remote_node.remote_blocks_held.pop(node, None)
+                    remote_node.free_space += remote_node.block_size
+            node.backed_up_blocks = [None] * node.n
+        # ! new extension
         # lose all remote data
         for owner, block_id in node.remote_blocks_held.items():
             owner.backed_up_blocks[block_id] = None
