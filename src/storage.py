@@ -3,12 +3,12 @@
 import logging
 import random
 import sys
-from argparse import ArgumentParser, BooleanOptionalAction, Namespace
+from argparse import ArgumentParser, Namespace
+from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
 from dataclasses import dataclass
 from random import expovariate
 from typing import Any
-from collections import defaultdict
 
 from humanfriendly import format_timespan, parse_size, parse_timespan
 
@@ -20,7 +20,7 @@ def exp_rv(mean: float) -> float:
     return expovariate(1 / mean)
 
 
-def get_safe_blocks(node: "Node") -> int:
+def get_safe_node_blocks(node: "Node") -> int:
     count: int = 0
     for i in range(node.n):
         if node.local_blocks[i] or node.backed_up_blocks[i]:
@@ -31,7 +31,7 @@ def get_safe_blocks(node: "Node") -> int:
 def get_lost_blocks(nodes: list["Node"]) -> int:
     lost: int = 0
     for node in nodes:
-        count: int = get_safe_blocks(node)
+        count: int = get_safe_node_blocks(node)
         if count < node.k:
             lost += node.n - count
     return lost
@@ -42,10 +42,9 @@ class Backup(Simulation):
 
     # type annotations for `Node` are strings here to allow a forward declaration:
     # https://stackoverflow.com/questions/36193540/self-reference-or-forward-reference-of-type-annotations-in-python
-    def __init__(self, nodes: list["Node"], simultaneous: bool = False) -> None:
+    def __init__(self, nodes: list["Node"]) -> None:
         super().__init__()  # call the __init__ method of parent class
         self.nodes: list["Node"] = nodes
-        self.simultaneous: bool = simultaneous
         # we add to the event queue the first event of each node going online and of failing
         for node in nodes:
             self.schedule(node.arrival_time, Online(node))
@@ -59,9 +58,8 @@ class Backup(Simulation):
         If `restore` is true, we are restoring a block owned by the downloader, otherwise, we are saving one owned by
         the uploader.
         """
-        if not self.simultaneous:
-            assert uploader.current_upload is None
-            assert downloader.current_download is None
+        assert uploader.current_upload is None
+        assert downloader.current_download is None
 
         block_size: int = downloader.block_size if restore else uploader.block_size
 
@@ -147,7 +145,9 @@ class Node:
         self.backed_up_blocks: list[list[Node]] = [[]] * self.n  # ! new extension
 
         # (owner -> block_id) mapping for remote blocks stored
-        self.remote_blocks_held: dict[Node, list[int]] = defaultdict(list)  # ! new extension
+        self.remote_blocks_held: dict[Node, list[int]] = defaultdict(
+            list
+        )  # ! new extension
 
         # current uploads and downloads, stored as a reference to the relative TransferComplete event
         self.current_upload: TransferComplete | None = None
@@ -211,9 +211,10 @@ class Node:
         sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
 
         # ! new extension
-        possible_peers: list["Node"] = sorted(list(set(
-            node for nodes in self.backed_up_blocks for node in nodes
-        )), key=lambda node: node.free_space)
+        possible_peers: list["Node"] = sorted(
+            list(set(node for nodes in self.backed_up_blocks for node in nodes)),
+            key=lambda node: node.free_space,
+        )
         for peer in sim.nodes:
             if peer not in possible_peers:
                 possible_peers.insert(0, peer)
@@ -374,7 +375,7 @@ class Fail(Disconnection):
         node: Node = self.node
         node.failed = True
         # ! new extension
-        if not node.lost and get_safe_blocks(node) < node.k:
+        if not node.lost and get_safe_node_blocks(node) < node.k:
             node.lost = True
             node.free_space = node.storage_size
             for nodes in node.backed_up_blocks:
@@ -417,15 +418,11 @@ class TransferComplete(Event):
             return  # this transfer was canceled, so ignore this event
         uploader: Node = self.uploader
         downloader: Node = self.downloader
-        if sim.simultaneous and (not uploader.online or not downloader.online):
-            return
-        self.update_block_state(sim.simultaneous)
+        assert uploader.online and downloader.online
+        self.update_block_state()
         uploader.current_upload = downloader.current_download = None
         uploader.schedule_next_upload(sim)
         downloader.schedule_next_download(sim)
-        if sim.simultaneous:
-            uploader.schedule_next_download(sim)
-            downloader.schedule_next_upload(sim)
         for node in [uploader, downloader]:
             sim.log_info(
                 f"{node}: {sum(node.local_blocks)} local blocks, "
@@ -433,7 +430,7 @@ class TransferComplete(Event):
                 f"{len(node.remote_blocks_held)} remote blocks held"
             )
 
-    def update_block_state(self, simultaneous: bool = False) -> None:
+    def update_block_state(self) -> None:
         """Needs to be specified by the subclasses, `BackupComplete` and `DownloadComplete`."""
         raise NotImplementedError
 
@@ -442,11 +439,9 @@ class BlockBackupComplete(TransferComplete):
     def process(self, sim: Backup) -> None:
         return super().process(sim)
 
-    def update_block_state(self, simultaneous: bool = False) -> None:
+    def update_block_state(self) -> None:
         owner: Node = self.uploader
         peer: Node = self.downloader
-        if simultaneous and peer.free_space - owner.block_size < 0:
-            return
         peer.free_space -= owner.block_size
         assert peer.free_space >= 0
         owner.backed_up_blocks[self.block_id].append(peer)  # ! new extension
@@ -457,7 +452,7 @@ class BlockRestoreComplete(TransferComplete):
     def process(self, sim: Backup) -> None:
         return super().process(sim)
 
-    def update_block_state(self, simultaneous: bool = False) -> None:
+    def update_block_state(self) -> None:
         owner: Node = self.downloader
         owner.local_blocks[self.block_id] = True
         if (
@@ -472,7 +467,6 @@ if __name__ == "__main__":
     parser.add_argument("--max-t", default="100 years")
     parser.add_argument("--seed", help="random seed")
     parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--simultaneous", default=False, action=BooleanOptionalAction)
     args: Namespace = parser.parse_args()
 
     if args.seed:
@@ -515,11 +509,13 @@ if __name__ == "__main__":
     print(f"\nStarting simulation with:\n{args}\n")
     config.write(sys.stdout)
 
-    sim: Backup = Backup(nodes, args.simultaneous)
+    sim: Backup = Backup(nodes)
     sim.run(parse_timespan(args.max_t))
     sim.log_info("Simulation over")
 
-    if get_lost_blocks(sim.nodes) == 0:
+    lost_blocks: int = get_lost_blocks(sim.nodes)
+
+    if lost_blocks == 0:
         print("Data is safe")
     else:
         print("Data has been lost")
