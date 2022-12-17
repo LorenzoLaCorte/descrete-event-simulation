@@ -1,7 +1,7 @@
 import multiprocessing
 import os
 import random
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
 from typing import Any
@@ -76,6 +76,9 @@ if __name__ == "__main__":
     parser.add_argument("config", help="configuration file")
     parser.add_argument("--seed", help="random seed")
     parser.add_argument("--max-t", default="2 years")
+    parser.add_argument(
+        "--multiprocessing", default=False, action=BooleanOptionalAction
+    )
     args: Namespace = parser.parse_args()
 
     if args.seed:
