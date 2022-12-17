@@ -1,9 +1,8 @@
 import multiprocessing
 import os
-import random
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
-from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
+from multiprocessing.managers import DictProxy
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +21,8 @@ RESULTS_DIR_PATH: Path = (
 def start_test(
     args: Namespace,
     config: ConfigParser,
-    results: defaultdict[str, defaultdict[str, int]],
+    result: DictProxy,  # type: ignore
+    runs: int = 1000,
 ) -> None:
     if args.extension == "base":
         from src.storage_base_extension import Backup, Node, get_lost_blocks
@@ -35,14 +35,14 @@ def start_test(
         from src.storage import Backup, Node, get_lost_blocks
 
     print(
-        f"\nStarting 1000 simulations with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
+        f"\nStarting {runs} simulations with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
         flush=True,
     )
 
     lost_blocks_arr: list[int] = []
     safe_sims: int = 0
 
-    for _ in range(1000):
+    for _ in range(runs):
         nodes: list[Node] = []  # we build the list of nodes to pass to the Backup class
 
         for node_class in config.sections():
@@ -66,7 +66,7 @@ def start_test(
         if lost_blocks == 0:
             safe_sims += 1
 
-    results[args.extension][config.get("peer", "average_lifetime")] = safe_sims
+    result[config.get("peer", "average_lifetime")] = safe_sims
     print(
         f"\nResults for simulation with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
         flush=True,
@@ -80,15 +80,11 @@ if __name__ == "__main__":
 
     parser: ArgumentParser = ArgumentParser()
     parser.add_argument("config", help="configuration file")
-    parser.add_argument("--seed", help="random seed")
     parser.add_argument("--max-t", default="2 years")
     parser.add_argument(
         "--multiprocessing", default=False, action=BooleanOptionalAction
     )
     args: Namespace = parser.parse_args()
-
-    if args.seed:
-        random.seed(args.seed)  # set a seed to make experiments repeatable
 
     # functions to parse every parameter of peer configuration
     parsing_functions: list[tuple[str, Any]] = [
@@ -107,13 +103,13 @@ if __name__ == "__main__":
     config: ConfigParser = ConfigParser()
     config.read(args.config)
 
+    manager = multiprocessing.Manager()
     processes: list[multiprocessing.Process] = []
-    results: defaultdict[str, defaultdict[str, int]] = defaultdict(
-        lambda: defaultdict(int)
-    )
+    results: dict[str, dict[str, int]] = {}
     try:
-        for ext in ["", "base", "advanced"]:
+        for ext in ["stock", "base", "advanced"]:
             args.extension = ext
+            result: DictProxy = manager.dict()  # type: ignore
             for lifetime in [
                 "8 days",
                 "16 days",
@@ -123,15 +119,17 @@ if __name__ == "__main__":
                 "256 days",
                 "512 days",
             ]:
+                result[lifetime] = 0
                 config.set("peer", "average_lifetime", lifetime)
                 if multiprocessing:
                     process = multiprocessing.Process(
-                        target=start_test, args=(args, config, results)
+                        target=start_test, args=(args, config, result)  # type: ignore
                     )
                     processes.append(process)
                     process.start()
                 else:
-                    start_test(args, config, results)
+                    start_test(args, config, result)
+            results[ext] = dict(result)  # type: ignore
         for process in processes:
             process.join()
 
@@ -164,8 +162,7 @@ if __name__ == "__main__":
                 "yaxis_title": "safe",
             }
         )
-        fig.update_xaxes({"tickmode": "array", "tickvals": [8, 16, 32, 64, 128, 256, 512]})  # type: ignore
-        fig.update_yaxes({"range": [0, 100], "tick0": 0, "dtick": 1})  # type: ignore
+        fig.update_yaxes({"range": [0, 1000], "tick0": 0, "dtick": 5})  # type: ignore
         fig.write_image(RESULTS_DIR_PATH.joinpath("result.pdf"))  # type: ignore
     except KeyboardInterrupt as e:
         for process in processes:
