@@ -74,14 +74,6 @@ if __name__ == "__main__":
     sim.run(parse_timespan(args.max_t))
     sim.log_info("Simulation over")
 
-    lost_blocks: int = get_lost_blocks(sim.nodes)  # type: ignore
-    print(f"Lost blocks: {lost_blocks}")
-
-    if lost_blocks == 0:
-        print("Data is safe")
-    else:
-        print("Data has been lost")
-
     for node in nodes:
         print(node.name)
         print(node.local_blocks)
@@ -89,3 +81,20 @@ if __name__ == "__main__":
         for n2 in nodes:
             print(len(node.remote_blocks_held[n2]))
             print(node in n2.remote_blocks_held and n2.remote_blocks_held[node] != [])
+
+    for node in nodes:
+        print(f"\n --- {node.name} ---")
+        print(f"Local blocks: {node.local_blocks}")
+        print(f"Has backup blocks: {[len(n) > 0 for n in node.backed_up_blocks]}")
+        print(f"Total backup blocks: {[len(n) for n in node.backed_up_blocks]}")
+        print("Blocks held by:\n")
+        for other_node in nodes:
+            print(f"{other_node.name}: {other_node.remote_blocks_held[node]}")
+
+    lost_blocks: int = get_lost_blocks(sim.nodes)  # type: ignore
+    print(f"Lost blocks: {lost_blocks}")
+
+    if lost_blocks == 0:
+        print("Data is safe")
+    else:
+        print("Data has been lost")

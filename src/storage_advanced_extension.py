@@ -135,7 +135,9 @@ class Node:
 
         # backed_up_blocks[block_id] is the peer we're storing that block on, or None if it's not backed up yet;
         # we start with no blocks backed up
-        self.backed_up_blocks: list[list[Node]] = [[]] * self.n  # ! new extension
+        self.backed_up_blocks: list[list[Node]] = [
+            [] for _ in range(self.n)
+        ]  # ! new extension
 
         # (owner -> block_id) mapping for remote blocks stored
         self.remote_blocks_held: dict[Node, list[int]] = defaultdict(
@@ -203,8 +205,10 @@ class Node:
                     )
                     return  # we have found our upload, we stop
 
+        # ! new extension
         if self.lost:
             return
+        # ! new extension
 
         # try to back up a block on a locally held remote node
         block_id: int | None = self.find_block_to_back_up(sim)
@@ -222,7 +226,7 @@ class Node:
         missing_peers: list["Node"] = []
         # list comp
         for peer in sim.nodes:
-            if peer not in possible_peers:
+            if peer not in possible_peers and peer is not self:
                 missing_peers.append(peer)
         missing_peers.sort(key=lambda node: node.free_space)
         possible_peers = missing_peers + possible_peers
@@ -281,7 +285,7 @@ class Node:
             if (
                 peer is not self
                 and peer.online
-                and not peer.lost
+                and not peer.lost  # ! new extension
                 # and peer not in self.remote_blocks_held  # ! new extension
                 and self.free_space >= self.block_size
                 and peer.current_upload is None
@@ -405,7 +409,7 @@ class Fail(Disconnection):
                         remote_node.remote_blocks_held[node]
                     )
                     remote_node.remote_blocks_held[node] = []
-            node.backed_up_blocks = [[]] * node.n
+            node.backed_up_blocks = [[] for _ in range(node.n)]
         # ! new extension
         # lose all remote data
         for owner, block_ids in node.remote_blocks_held.items():
