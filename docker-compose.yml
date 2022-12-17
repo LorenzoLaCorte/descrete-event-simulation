@@ -20,7 +20,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.slim
-    command: python3 tests/storage.py --multiprocessing
+    command: python3 test/storage.py config/p2p.cfg --multiprocessing
     volumes:
       - ./:/dc-assignments
       - /etc/localtime:/etc/localtime:ro
