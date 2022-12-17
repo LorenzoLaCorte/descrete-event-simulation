@@ -401,7 +401,7 @@ class Fail(Disconnection):
         node.local_blocks = [False] * node.n  # lose all local data
         # ! new extension
         if not node.lost and get_safe_node_blocks(node) < node.k:
-            print(f"{node.name} lost")
+            sim.log_info(f"{node.name} lost")
             node.lost = True
             for nodes in node.backed_up_blocks:
                 for remote_node in nodes:
