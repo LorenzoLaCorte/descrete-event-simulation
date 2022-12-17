@@ -35,7 +35,7 @@ def start_test(
         from src.storage import Backup, Node, get_lost_blocks
 
     print(
-        f"\nStarting 100 simulations with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
+        f"\nStarting 1000 simulations with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
         flush=True,
     )
 
