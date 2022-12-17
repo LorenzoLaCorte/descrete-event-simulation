@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from random import expovariate
+from typing import Optional
 
 from humanfriendly import format_timespan
 
@@ -11,6 +12,25 @@ from .discrete_event_sim import Event, Simulation
 def exp_rv(mean: float) -> float:
     """Return an exponential random variable with the given mean."""
     return expovariate(1 / mean)
+
+
+def print_stats(nodes: list["Node"]) -> None:
+    for node in nodes:
+        print(node.name)
+        print(node.local_blocks)
+        print([len(n) for n in node.backed_up_blocks])
+        for n2 in nodes:
+            print(len(node.remote_blocks_held[n2]))
+            print(node in n2.remote_blocks_held and n2.remote_blocks_held[node] != [])
+
+    for node in nodes:
+        print(f"\n --- {node.name} ---")
+        print(f"Local blocks: {node.local_blocks}")
+        print(f"Has backup blocks: {[len(n) > 0 for n in node.backed_up_blocks]}")
+        print(f"Total backup blocks: {[len(n) for n in node.backed_up_blocks]}")
+        print("Blocks held by:\n")
+        for other_node in nodes:
+            print(f"{other_node.name}: {other_node.remote_blocks_held[node]}")
 
 
 def get_safe_node_blocks(node: "Node") -> int:
@@ -148,7 +168,9 @@ class Node:
         self.current_upload: TransferComplete | None = None
         self.current_download: TransferComplete | None = None
 
-    def find_block_to_back_up(self, sim: Backup, downloader=None) -> int | None:
+    def find_block_to_back_up(
+        self, sim: Backup, downloader: Optional["Node"] = None
+    ) -> int | None:
         """Returns the block id of a block that needs backing up, or None if there are none."""
 
         # find a block that we have locally but not remotely

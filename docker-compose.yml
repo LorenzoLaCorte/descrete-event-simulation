@@ -6,7 +6,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.slim
-    command: python3 tests/mmn.py --multiprocessing-level 2
+    command: python3 tests/mmn.py --multiprocessing
+    volumes:
+      - ./:/dc-assignments
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /dc-assignments
+    environment:
+      - TZ=Europe/Rome
+    restart: on-failure
+  
+  storage-test:
+    container_name: storage-test
+    build:
+      context: .
+      dockerfile: Dockerfile.slim
+    command: python3 tests/storage.py --multiprocessing
     volumes:
       - ./:/dc-assignments
       - /etc/localtime:/etc/localtime:ro

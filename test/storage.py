@@ -1,40 +1,45 @@
+import multiprocessing
+import os
 import random
 from argparse import ArgumentParser, Namespace
 from configparser import ConfigParser, SectionProxy
-from typing import Any
-
-from humanfriendly import parse_size, parse_timespan
-import multiprocessing
-import os
-from argparse import ArgumentParser, Namespace
 from pathlib import Path
+from typing import Any
 
 import plotly.graph_objects as go  # type: ignore
 import plotly.io as pio  # type: ignore
+from humanfriendly import parse_size, parse_timespan
 from plotly.subplots import make_subplots  # type: ignore
+
+pio.kaleido.scope.mathjax = None
 
 RESULTS_DIR_PATH: Path = (
     (Path(__file__).absolute().parent.parent).joinpath("results").joinpath("Storage")
 )
 
-def start_test(args: Namespace, config: ConfigParser) -> None:  
+
+def start_test(args: Namespace, config: ConfigParser) -> None:
     if args.extension == "base":
         from src.storage_base_extension import Backup, Node, get_lost_blocks
 
     elif args.extension == "advanced":
-        from src.storage_advanced_extension import Backup, Node, get_lost_blocks
-    
+        from src.storage_advanced_extension import (Backup, Node,
+                                                    get_lost_blocks)
+
     else:
         from src.storage import Backup, Node, get_lost_blocks
 
-    print(f"\nStarting 100 simulations with:\n{args} - {config.get('peer', 'average_lifetime')}\n", flush=True)
+    print(
+        f"\nStarting 100 simulations with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
+        flush=True,
+    )
 
     lost_blocks_arr: list[int] = []
     safe_sims: int = 0
 
     for _ in range(100):
         nodes: list[Node] = []  # we build the list of nodes to pass to the Backup class
-    
+
         for node_class in config.sections():
             class_config: SectionProxy = config[node_class]
             # list comprehension: https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions
@@ -47,21 +52,21 @@ def start_test(args: Namespace, config: ConfigParser) -> None:
                 for i in range(class_config.getint("number"))
             )
 
-        sim = Backup(nodes)
+        sim = Backup(nodes)  # type: ignore
         sim.run(parse_timespan(args.max_t))
-        
+
         lost_blocks: int = get_lost_blocks(sim.nodes)  # type: ignore
         lost_blocks_arr.append(lost_blocks)
 
         if lost_blocks == 0:
             safe_sims += 1
-    
-    print(f"\nResults for simulation with:\n{args} - {config.get('peer', 'average_lifetime')}\n", flush=True)
+
+    print(
+        f"\nResults for simulation with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
+        flush=True,
+    )
     print(f"Safe Simulations: {safe_sims}")
     print(f"Lost Blocks Average: {sum(lost_blocks_arr) / len(lost_blocks_arr)}")
-    
-    # UPDATE FOR SCATTER
-    # fig.write_image(RESULTS_DIR_PATH.joinpath(f"n{args.n}mu{args.mu}.pdf"))  # type: ignore
 
 
 if __name__ == "__main__":
@@ -98,10 +103,20 @@ if __name__ == "__main__":
         for ext in ["", "base", "advanced"]:
             args.extension = ext
 
-            for lifetime in ["8 days", "16 days", "32 days", "64 days", "128 days", "256 days", "512 days"]:
-                config.set('peer', 'average_lifetime', lifetime)
+            for lifetime in [
+                "8 days",
+                "16 days",
+                "32 days",
+                "64 days",
+                "128 days",
+                "256 days",
+                "512 days",
+            ]:
+                config.set("peer", "average_lifetime", lifetime)
                 if multiprocessing:
-                    process = multiprocessing.Process(target=start_test, args=(args,config))
+                    process = multiprocessing.Process(
+                        target=start_test, args=(args, config)
+                    )
                     processes.append(process)
                     process.start()
                 else:
