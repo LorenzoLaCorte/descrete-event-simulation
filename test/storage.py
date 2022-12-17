@@ -2,6 +2,7 @@ import multiprocessing
 import os
 import random
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
+from collections import defaultdict
 from configparser import ConfigParser, SectionProxy
 from pathlib import Path
 from typing import Any
@@ -14,11 +15,15 @@ from plotly.subplots import make_subplots  # type: ignore
 pio.kaleido.scope.mathjax = None
 
 RESULTS_DIR_PATH: Path = (
-    (Path(__file__).absolute().parent.parent).joinpath("results").joinpath("Storage")
+    (Path(__file__).absolute().parent.parent).joinpath("results").joinpath("storage")
 )
 
 
-def start_test(args: Namespace, config: ConfigParser) -> None:
+def start_test(
+    args: Namespace,
+    config: ConfigParser,
+    results: defaultdict[str, defaultdict[str, int]],
+) -> None:
     if args.extension == "base":
         from src.storage_base_extension import Backup, Node, get_lost_blocks
 
@@ -37,7 +42,7 @@ def start_test(args: Namespace, config: ConfigParser) -> None:
     lost_blocks_arr: list[int] = []
     safe_sims: int = 0
 
-    for _ in range(100):
+    for _ in range(1000):
         nodes: list[Node] = []  # we build the list of nodes to pass to the Backup class
 
         for node_class in config.sections():
@@ -61,6 +66,7 @@ def start_test(args: Namespace, config: ConfigParser) -> None:
         if lost_blocks == 0:
             safe_sims += 1
 
+    results[args.extension][config.get("peer", "average_lifetime")] = safe_sims
     print(
         f"\nResults for simulation with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
         flush=True,
@@ -102,10 +108,12 @@ if __name__ == "__main__":
     config.read(args.config)
 
     processes: list[multiprocessing.Process] = []
+    results: defaultdict[str, defaultdict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     try:
         for ext in ["", "base", "advanced"]:
             args.extension = ext
-
             for lifetime in [
                 "8 days",
                 "16 days",
@@ -118,14 +126,47 @@ if __name__ == "__main__":
                 config.set("peer", "average_lifetime", lifetime)
                 if multiprocessing:
                     process = multiprocessing.Process(
-                        target=start_test, args=(args, config)
+                        target=start_test, args=(args, config, results)
                     )
                     processes.append(process)
                     process.start()
                 else:
-                    start_test(args, config)
+                    start_test(args, config, results)
         for process in processes:
             process.join()
+
+        fig: go.Figure = make_subplots(rows=1, cols=1)
+        colors: list[str] = ["#58508d", "#bc5090", "#ff6361"]
+        color_index = 0
+        for ext, res in results.items():
+            fig.append_trace(  # type: ignore
+                go.Scatter(
+                    x=list(res.keys()),
+                    y=list(res.values()),
+                    line_color=colors[color_index],
+                    line_width=3,
+                    name=ext,
+                    mode="lines+markers",
+                    showlegend=True,
+                    legendgroup=1,
+                ),
+                row=1,
+                col=1,
+            )
+            color_index += 1
+        fig.update_layout(  # type: ignore
+            {
+                "autosize": False,
+                "height": 720,
+                "width": 1080,
+                "legend_title_text": "extension",
+                "xaxis_title": "average_lifetime (1000 simulations)",
+                "yaxis_title": "safe",
+            }
+        )
+        fig.update_xaxes({"tickmode": "array", "tickvals": [8, 16, 32, 64, 128, 256, 512]})  # type: ignore
+        fig.update_yaxes({"range": [0, 100], "tick0": 0, "dtick": 1})  # type: ignore
+        fig.write_image(RESULTS_DIR_PATH.joinpath("result.pdf"))  # type: ignore
     except KeyboardInterrupt as e:
         for process in processes:
             process.kill()
