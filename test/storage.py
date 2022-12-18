@@ -22,7 +22,7 @@ def start_test(
     args: Namespace,
     config: ConfigParser,
     result: DictProxy,  # type: ignore
-    runs: int = 1000,
+    runs: int = 1,
 ) -> None:
     if args.extension == "base":
         from src.storage_base_extension import Backup, Node, get_lost_blocks
@@ -66,13 +66,14 @@ def start_test(
         if lost_blocks == 0:
             safe_sims += 1
 
-    result[config.get("peer", "average_lifetime")] = safe_sims
+    lost_blocks_average = (sum(lost_blocks_arr) / len(lost_blocks_arr))
+    result[config.get("peer", "average_lifetime")] = (safe_sims, lost_blocks_average)
     print(
         f"\nResults for simulation with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
         flush=True,
     )
     print(f"Safe Simulations: {safe_sims}")
-    print(f"Lost Blocks Average: {sum(lost_blocks_arr) / len(lost_blocks_arr)}")
+    print(f"Lost Blocks Average: {lost_blocks_average}")
 
 
 if __name__ == "__main__":
@@ -105,7 +106,7 @@ if __name__ == "__main__":
 
     manager = multiprocessing.Manager()
     processes: list[multiprocessing.Process] = []
-    results: dict[str, dict[str, int]] = {}
+    results: dict[str, dict[str, tuple[int, float]]] = {} 
     try:
         for ext in ["stock", "base", "advanced"]:
             args.extension = ext
@@ -121,7 +122,7 @@ if __name__ == "__main__":
                 "512 days",
                 "1024 days"
             ]:
-                result[lifetime] = 0
+                result[lifetime] = (0,0)
                 config.set("peer", "average_lifetime", lifetime)
                 if multiprocessing:
                     process = multiprocessing.Process(
@@ -136,13 +137,36 @@ if __name__ == "__main__":
             process.join()
 
         fig: go.Figure = make_subplots(rows=1, cols=1)
+        fig2: go.Figure = make_subplots(rows=1, cols=1)
+
         colors: list[str] = ["#58508d", "#bc5090", "#ff6361"]
         color_index = 0
         for ext, res in results.items():
+            safe_simulations: list[int] = []
+            block_simulations: list[float] = []
+
+            for el in list(res.values()):
+                safe_simulations.append(el[0])
+                block_simulations.append(el[1])
+
             fig.append_trace(  # type: ignore
                 go.Scatter(
                     x=list(res.keys()),
-                    y=list(res.values()),
+                    y=safe_simulations,
+                    line_color=colors[color_index],
+                    line_width=3,
+                    name=ext,
+                    mode="lines+markers",
+                    showlegend=True,
+                    legendgroup=1,
+                ),
+                row=1,
+                col=1,
+            )
+            fig2.append_trace(  # type: ignore
+                go.Scatter(
+                    x=list(res.keys()),
+                    y=block_simulations,
                     line_color=colors[color_index],
                     line_width=3,
                     name=ext,
@@ -164,8 +188,23 @@ if __name__ == "__main__":
                 "yaxis_title": "safe",
             }
         )
+        fig2.update_layout(  # type: ignore
+            {
+                "autosize": False,
+                "height": 720,
+                "width": 1080,
+                "legend_title_text": "extension",
+                "xaxis_title": "average_lifetime (1000 simulations)",
+                "yaxis_title": "lost blocks average",
+            }
+        )
         fig.update_yaxes({"range": [0, 1000], "tick0": 0, "dtick": 50})  # type: ignore
-        fig.write_image(RESULTS_DIR_PATH.joinpath("result.pdf"))  # type: ignore
+        fig2.update_yaxes({"range": [0, 100], "tick0": 0, "dtick": 5})  # type: ignore
+
+        fig.write_image(RESULTS_DIR_PATH.joinpath("result_safeness.pdf"))  # type: ignore
+        fig2.write_image(RESULTS_DIR_PATH.joinpath("result_blocks.pdf"))  # type: ignore
+
+
     except KeyboardInterrupt as e:
         for process in processes:
             process.kill()
