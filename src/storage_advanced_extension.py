@@ -15,7 +15,9 @@ def exp_rv(mean: float) -> float:
 
 
 def print_stats(nodes: list["Node"]) -> None:
-    block_replicas: dict[Node, list[int]] = {} # mapping node to number of replica of its blocks
+    block_replicas: dict[
+        Node, list[int]
+    ] = {}  # mapping node to number of replica of its blocks
     for node in nodes:
         print(node.name)
         print(node.local_blocks)
@@ -31,10 +33,10 @@ def print_stats(nodes: list["Node"]) -> None:
         print(f"Total backup blocks: {[len(n) for n in node.backed_up_blocks]}")
         print("Blocks held by:\n")
         for other_node in nodes:
-            if node not in block_replicas: 
-                 block_replicas[node] = [0] * node.n
+            if node not in block_replicas:
+                block_replicas[node] = [0] * node.n
             for block in other_node.remote_blocks_held[node]:
-                block_replicas[node][block] += 1 
+                block_replicas[node][block] += 1
             print(f"{other_node.name}: {other_node.remote_blocks_held[node]}")
 
     print("\nStats about replica:")
@@ -43,7 +45,9 @@ def print_stats(nodes: list["Node"]) -> None:
         print(f"{node.name} has replica: {block_replicas[node]}")
         total_sum += sum(block_replicas[node])
 
-    print(f"\nAverage number of replica per block: {total_sum / (nodes[0].n * len(nodes))}")
+    print(
+        f"\nAverage number of replica per block: {total_sum / (nodes[0].n * len(nodes))}"
+    )
 
 
 def get_safe_node_blocks(node: "Node") -> int:

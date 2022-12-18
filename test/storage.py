@@ -22,7 +22,7 @@ def start_test(
     args: Namespace,
     config: ConfigParser,
     result: DictProxy,  # type: ignore
-    runs: int = 1,
+    runs: int = 1000,
 ) -> None:
     if args.extension == "base":
         from src.storage_base_extension import Backup, Node, get_lost_blocks
@@ -66,7 +66,7 @@ def start_test(
         if lost_blocks == 0:
             safe_sims += 1
 
-    lost_blocks_average = (sum(lost_blocks_arr) / len(lost_blocks_arr))
+    lost_blocks_average = sum(lost_blocks_arr) / len(lost_blocks_arr)
     result[config.get("peer", "average_lifetime")] = (safe_sims, lost_blocks_average)
     print(
         f"\nResults for simulation with:\n{args} - {config.get('peer', 'average_lifetime')}\n",
@@ -106,7 +106,7 @@ if __name__ == "__main__":
 
     manager = multiprocessing.Manager()
     processes: list[multiprocessing.Process] = []
-    results: dict[str, dict[str, tuple[int, float]]] = {} 
+    results: dict[str, dict[str, tuple[int, float]]] = {}
     try:
         for ext in ["stock", "base", "advanced"]:
             args.extension = ext
@@ -120,9 +120,9 @@ if __name__ == "__main__":
                 "128 days",
                 "256 days",
                 "512 days",
-                "1024 days"
+                "1024 days",
             ]:
-                result[lifetime] = (0,0)
+                result[lifetime] = (0, 0)
                 config.set("peer", "average_lifetime", lifetime)
                 if multiprocessing:
                     process = multiprocessing.Process(
@@ -200,11 +200,8 @@ if __name__ == "__main__":
         )
         fig.update_yaxes({"range": [0, 1000], "tick0": 0, "dtick": 50})  # type: ignore
         fig2.update_yaxes({"range": [0, 100], "tick0": 0, "dtick": 5})  # type: ignore
-
         fig.write_image(RESULTS_DIR_PATH.joinpath("result_safeness.pdf"))  # type: ignore
         fig2.write_image(RESULTS_DIR_PATH.joinpath("result_blocks.pdf"))  # type: ignore
-
-
     except KeyboardInterrupt as e:
         for process in processes:
             process.kill()

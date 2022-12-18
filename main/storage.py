@@ -29,7 +29,8 @@ if __name__ == "__main__":
         print("Using base extension")
     elif args.extension == "advanced":
         from src.storage_advanced_extension import (Backup, Node,
-                                                    get_lost_blocks, print_stats)
+                                                    get_lost_blocks,
+                                                    print_stats)
 
         print("Using advanced extension")
     else:
@@ -83,4 +84,4 @@ if __name__ == "__main__":
         print("Data has been lost")
 
     if args.extension == "advanced":
-        print_stats(sim.nodes)
+        print_stats(sim.nodes)  # type: ignore
