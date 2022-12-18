@@ -129,7 +129,7 @@ if __name__ == "__main__":
                     process.start()
                 else:
                     start_test(args, config, result)
-            results[ext] = dict(result)  # type: ignore
+            results[ext] = result  # type: ignore
         for process in processes:
             process.join()
 
@@ -162,7 +162,7 @@ if __name__ == "__main__":
                 "yaxis_title": "safe",
             }
         )
-        fig.update_yaxes({"range": [0, 1000], "tick0": 0, "dtick": 5})  # type: ignore
+        fig.update_yaxes({"range": [0, 1000], "tick0": 0, "dtick": 50})  # type: ignore
         fig.write_image(RESULTS_DIR_PATH.joinpath("result.pdf"))  # type: ignore
     except KeyboardInterrupt as e:
         for process in processes:
