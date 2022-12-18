@@ -111,6 +111,7 @@ if __name__ == "__main__":
             args.extension = ext
             result: DictProxy = manager.dict()  # type: ignore
             for lifetime in [
+                "4 days",
                 "8 days",
                 "16 days",
                 "32 days",
@@ -118,6 +119,7 @@ if __name__ == "__main__":
                 "128 days",
                 "256 days",
                 "512 days",
+                "1024 days"
             ]:
                 result[lifetime] = 0
                 config.set("peer", "average_lifetime", lifetime)
