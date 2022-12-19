@@ -30,4 +30,4 @@ config files are in the `config` folders.
 `poetry run python3 test/storage.py config/p2p.cfg --multiprocessing`
 
 ### docker
-for better testing a docker image has been defined and you can use it with the `docker-compose.yml` with: `docker-compose up -d`
+for better testing a docker image has been defined and you can use it with the `docker-compose.yml` with: `docker-compose up -d {mmn-test|storage-test}`

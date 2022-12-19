@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.slim
-    command: python3 tests/mmn.py --multiprocessing
+    command: python3 test/mmn.py --multiprocessing
     volumes:
       - ./:/dc-assignments
       - /etc/localtime:/etc/localtime:ro
