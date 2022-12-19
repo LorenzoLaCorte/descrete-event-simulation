@@ -218,7 +218,7 @@ class Node:
             return block_ids[0]
         # ! new extension
 
-    def schedule_next_upload(self, sim: Backup) -> None:
+    def schedule_next_upload(self, sim: Backup) -> None:  # noqa: C901
         """Schedule the next upload, if any."""
 
         assert self.online

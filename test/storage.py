@@ -76,7 +76,7 @@ def start_test(
     print(f"Lost Blocks Average: {lost_blocks_average}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # noqa: C901
     os.makedirs(RESULTS_DIR_PATH, exist_ok=True)
 
     parser: ArgumentParser = ArgumentParser()
@@ -139,8 +139,8 @@ if __name__ == "__main__":
         fig: go.Figure = make_subplots(rows=1, cols=1)
         fig2: go.Figure = make_subplots(rows=1, cols=1)
 
-        colors: list[str] = ["#58508d", "#bc5090", "#ff6361"]
-        color_index = 0
+        colors: list[str] = ["#ffa600", "#bc5090", "#ff6361"]
+        color_index: int = 0
         for ext, res in results.items():
             safe_simulations: list[int] = []
             block_simulations: list[float] = []
